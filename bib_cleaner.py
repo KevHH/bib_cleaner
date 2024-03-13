@@ -18,7 +18,11 @@ def get_next_entry_indices(i:int, lines: list[str]):
         return None, None 
     
     # locate start of entry
-    st = next(j+i for j, line in enumerate(lines[i:]) if "@" in line)
+    try:
+        st = next(j+i for j, line in enumerate(lines[i:]) if "@" in line)
+    except StopIteration:
+        return None, None
+    
     if st+1 > len(lines):
         raise ValueError('Bib entry started at the last line.')
     
@@ -62,6 +66,7 @@ df[0] = df[0].str.lower()
 if len(df[0][df[0].duplicated()]) > 0:
     raise ValueError('csv file contains duplicated entries, exiting.')
 abbrv = df.set_index(0).T.to_dict('records')[0]
+abbrv_items = df[1].str.lower().to_list()
 
 # read .bib file
 with open(args.bib, 'r') as f:
@@ -78,7 +83,12 @@ while st is not None and ed is not None:
     entry_name = lines[st].split('{')[-1].split(',')[0]
     
     # search for journal line to be replaced
-    index = next(j+st+1 for j, line in enumerate(lines[st+1:]) if "journal=" in line)
+    try:
+        index = next(j+st for j, line in enumerate(lines[st:ed+1]) if "journal=" in line)
+    except StopIteration:
+        # no journal entry found, skip
+        st, ed = get_next_entry_indices(ed, lines)
+        continue
     
     # split only at the first = sign
     line_info = lines[index].strip().split('=', 1)
@@ -92,7 +102,7 @@ while st is not None and ed is not None:
     elif 'arxiv' in j_lower:
         arxiv_log.append('  - line ' + str(index) + ', entry "' + entry_name + '", "' 
                                 + journal + '"\n' )
-    elif '.' not in journal:
+    elif j_lower not in abbrv_items and '.' not in journal:
         update_csv_log.append('  - line ' + str(index) + ', entry "' + entry_name + '", "' 
                                 + journal + '"\n' )
     else:
